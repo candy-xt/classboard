@@ -1,0 +1,10 @@
+{
+  "class_name": "0105",
+  "students": [
+    { "student_no": "01", "name": "张同学" },
+    { "student_no": "02", "name": "李同学" },
+    { "student_no": "03", "name": "王同学" },
+    { "student_no": "04", "name": "赵同学" },
+    { "student_no": "05", "name": "孙同学" }
+  ]
+}

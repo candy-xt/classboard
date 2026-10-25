@@ -1,0 +1,15 @@
+[project]
+name = "classboard"
+version = "0.1.0"
+description = "ClassBoard 随机点名客户端"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "pyside6==6.9.1",
+    "pyside6-fluent-widgets==1.11.3",
+]
+
+[dependency-groups]
+dev = []
+
+[tool.uv]
+package = false

@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 虚拟环境（uv 会重建）
+.venv/
+venv/
+
+# Nuitka 构建产物
+build/
+dist/
+*.build/
+*.dist/
+*.onefile-build/
+
+# 运行期本地数据（可能在安装目录生成）
+.classboard/
+config.txt
+ui.json
+
+# 真实班级名单：含学生姓名，不提交
+students.json
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
