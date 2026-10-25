@@ -12,19 +12,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 安装 Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          architecture: x64
+
       - name: 安装 uv
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
       - name: 安装依赖
-        run: uv sync --python 3.13
+        run: uv pip install --system -r pyproject.toml
 
-      - name: 让后续步骤使用 venv 里的 Python
-        shell: pwsh
-        run: |
-          "$PWD\.venv\Scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          .\.venv\Scripts\python.exe -c "import PySide6, qfluentwidgets; print('PySide6', PySide6.__version__)"
+      - name: 确认依赖可用
+        run: python -c "import PySide6, qfluentwidgets; print('PySide6', PySide6.__version__)"
 
       - name: Nuitka 编译缓存
         uses: actions/cache@v4
@@ -34,13 +37,13 @@ jobs:
           restore-keys: nuitka-${{ runner.os }}-
 
       - name: Nuitka 打包
-        uses: Nuitka/Nuitka-Action@v1
+        uses: Nuitka/Nuitka-Action@main
         with:
           nuitka-version: main
           script-name: main.py
           mode: standalone
           enable-plugins: pyside6
-          # 只带示例模板，真实名单到教室后再放进 exe 同目录（students.json 优先）
+          # 只带示例模板，真实名单部署时放进 exe 同目录（students.json 优先）
           include-data-files: students.example.json=students.example.json
           windows-console-mode: disable
           output-dir: build
@@ -50,11 +53,12 @@ jobs:
         shell: pwsh
         run: |
           Rename-Item build\main.dist\main.exe ClassBoard.exe
-          Get-ChildItem build\main.dist | Select-Object -First 10 Name
+          Get-ChildItem build\main.dist | Select-Object -First 8 Name
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
           name: ClassBoard-Windows
           path: build/main.dist/
+          include-hidden-files: true
           retention-days: 30
