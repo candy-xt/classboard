@@ -193,3 +193,37 @@ class TestWindowPosition(unittest.TestCase):
         from core.config import load_window_position
         (Path(self.tmp) / "ui.json").write_text("{不是json", encoding="utf-8")
         self.assertIsNone(load_window_position("ball"))
+
+
+class TestEncodingFallback(unittest.TestCase):
+    """Windows 记事本常存成 GBK，配置和名单都要能读出来。"""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        os.environ["CLASSBOARD_HOME"] = str(self.tmp)
+
+    def tearDown(self):
+        os.environ.pop("CLASSBOARD_HOME", None)
+
+    def test_gbk_config(self):
+        text = (
+            "# 中文注释\n"
+            "SERVER=http://1.2.3.4:8317\n"
+            "KEY=test-key\n"
+            "CLIENT_ID=CLASS-PC-01\n"
+            "WHITELIST=0105\n"
+        )
+        (self.tmp / "config.txt").write_bytes(text.encode("gbk"))
+        cfg = load_config()
+        self.assertEqual(cfg.server, "http://1.2.3.4:8317")
+        self.assertEqual(cfg.key, "test-key")
+        self.assertEqual(cfg.whitelist, ["0105"])
+
+    def test_gbk_roster(self):
+        data = {"class_name": "0105",
+                "students": [{"student_no": "01", "name": "张淏舜"}]}
+        p = self.tmp / "students.json"
+        p.write_bytes(json.dumps(data, ensure_ascii=False).encode("gbk"))
+        class_name, students = load_roster(p)
+        self.assertEqual(class_name, "0105")
+        self.assertEqual(students[0].name, "张淏舜")

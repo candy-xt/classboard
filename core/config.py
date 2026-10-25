@@ -29,13 +29,28 @@ class ClientConfig:
     whitelist: list
 
 
+def read_text_any(path) -> str:
+    """按 UTF-8 读文本，失败再按 GBK 读。
+
+    Windows 记事本常把文件存成 ANSI(GBK)，直接 utf-8 会抛异常；
+    配置文件里又有中文注释，所以两种编码都兜一下。
+    """
+    raw = Path(path).read_bytes()
+    for enc in ("utf-8-sig", "gbk"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", "replace")
+
+
 def load_config(path=None):
     """读取配置；文件不存在返回 None。"""
     path = Path(path) if path else config_dir() / "config.txt"
     if not path.exists():
         return None
     values = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in read_text_any(path).splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue

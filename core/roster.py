@@ -11,6 +11,7 @@
 import json
 from pathlib import Path
 
+from .config import read_text_any
 from .models import Student
 
 
@@ -19,7 +20,8 @@ def load_roster(path) -> tuple:
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"找不到名单文件：{path}（应与主程序放在同一目录）")
-    data = json.loads(path.read_text(encoding="utf-8"))
+    # 记事本改过的名单可能是 GBK，统一走编码兜底
+    data = json.loads(read_text_any(path))
 
     if isinstance(data, dict):
         class_name = str(data.get("class_name", "")).strip()
