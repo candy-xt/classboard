@@ -43,6 +43,8 @@ jobs:
           script-name: main.py
           mode: standalone
           enable-plugins: pyside6
+          # 剥离 docstring：源码里的内部说明不应残留进 exe 二进制
+          python-flag: no_docstrings
           # 只带示例模板，真实名单部署时放进 exe 同目录（students.json 优先）
           include-data-files: students.example.json=students.example.json
           windows-console-mode: disable

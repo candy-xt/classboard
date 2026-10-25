@@ -129,13 +129,13 @@ class App(QObject):
         if self.cloud_on:
             self.pool.start(SyncTask(self.cfg, self.class_name, self.students, self.signals))
         else:
-            print(f"[ClassBoard] 本地模式启动（{self.class_name}，{len(self.students)} 人）")
+            print(f"[ClassBoard] 就绪（{len(self.students)} 人）")
 
     # ------------------------------------------------------------------
     def _on_synced(self, students, source):
         self.students = students
         self.source = source
-        print(f"[ClassBoard] 名单已同步（{len(students)} 人）")
+        print(f"[ClassBoard] 名单已载入（{len(students)} 人）")
 
     def _save_ball_position(self, x, y):
         save_window_position("ball", x, y)
