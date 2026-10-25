@@ -26,19 +26,6 @@ jobs:
           "$PWD\.venv\Scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           .\.venv\Scripts\python.exe -c "import PySide6, qfluentwidgets; print('PySide6', PySide6.__version__)"
 
-      - name: 准备名单文件
-        shell: pwsh
-        env:
-          STUDENTS_JSON: ${{ secrets.STUDENTS_JSON }}
-        run: |
-          if ($env:STUDENTS_JSON) {
-            [IO.File]::WriteAllText("$PWD\students.json", $env:STUDENTS_JSON, [Text.UTF8Encoding]::new($false))
-            Write-Host "已使用仓库 Secret 中的真实名单"
-          } else {
-            Copy-Item students.example.json students.json
-            Write-Host "未配置 STUDENTS_JSON，使用示例名单（打包后自行替换）"
-          }
-
       - name: Nuitka 编译缓存
         uses: actions/cache@v4
         with:
@@ -53,7 +40,8 @@ jobs:
           script-name: main.py
           mode: standalone
           enable-plugins: pyside6
-          include-data-files: students.json=students.json
+          # 只带示例模板，真实名单到教室后再放进 exe 同目录（students.json 优先）
+          include-data-files: students.example.json=students.example.json
           windows-console-mode: disable
           output-dir: build
           assume-yes-for-downloads: true
