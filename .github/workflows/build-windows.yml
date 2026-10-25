@@ -1,0 +1,72 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:          # 手动点一下就能编
+  push:
+    tags:
+      - "v*"                  # 打标签也自动编
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: 安装依赖
+        run: uv sync --python 3.13
+
+      - name: 让后续步骤使用 venv 里的 Python
+        shell: pwsh
+        run: |
+          "$PWD\.venv\Scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          .\.venv\Scripts\python.exe -c "import PySide6, qfluentwidgets; print('PySide6', PySide6.__version__)"
+
+      - name: 准备名单文件
+        shell: pwsh
+        env:
+          STUDENTS_JSON: ${{ secrets.STUDENTS_JSON }}
+        run: |
+          if ($env:STUDENTS_JSON) {
+            [IO.File]::WriteAllText("$PWD\students.json", $env:STUDENTS_JSON, [Text.UTF8Encoding]::new($false))
+            Write-Host "已使用仓库 Secret 中的真实名单"
+          } else {
+            Copy-Item students.example.json students.json
+            Write-Host "未配置 STUDENTS_JSON，使用示例名单（打包后自行替换）"
+          }
+
+      - name: Nuitka 编译缓存
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\Nuitka
+          key: nuitka-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: nuitka-${{ runner.os }}-
+
+      - name: Nuitka 打包
+        uses: Nuitka/Nuitka-Action@v1
+        with:
+          nuitka-version: main
+          script-name: main.py
+          mode: standalone
+          enable-plugins: pyside6
+          include-data-files: students.json=students.json
+          windows-console-mode: disable
+          output-dir: build
+          assume-yes-for-downloads: true
+
+      - name: 重命名主程序
+        shell: pwsh
+        run: |
+          Rename-Item build\main.dist\main.exe ClassBoard.exe
+          Get-ChildItem build\main.dist | Select-Object -First 10 Name
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClassBoard-Windows
+          path: build/main.dist/
+          retention-days: 30
