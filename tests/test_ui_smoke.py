@@ -26,6 +26,16 @@ def _students(n=20):
     return [Student(f"{i:02d}", f"同学{i:02d}") for i in range(1, n + 1)]
 
 
+def _left_click():
+    """构造一个左键按下事件，用于测试卡片点击。"""
+    from PySide6.QtCore import QEvent, QPointF
+    from PySide6.QtGui import QMouseEvent
+
+    pos = QPointF(5, 5)
+    return QMouseEvent(QEvent.MouseButtonPress, pos, pos,
+                       Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+
+
 class TestUiSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -72,21 +82,24 @@ class TestUiSmoke(unittest.TestCase):
         card = ConfigCard("测试班", _students(), mode=MODE_NO_REPEAT)
         card.show()
         self.assertEqual(card.mode, MODE_NO_REPEAT)
-        self.assertEqual(len(card._checkboxes), 20)
-        # 取消勾选第 3 个学生
-        card._checkboxes["03"].setChecked(False)
+        self.assertEqual(len(card._chips), 20)
+        # 点一下卡片取消参与
+        chip = card._chips["03"]
+        self.assertTrue(chip.is_checked())
+        chip.mousePressEvent(_left_click())
+        self.assertFalse(chip.is_checked())
         card._on_start()
         self.assertIn("03", card.excluded)
+        self.assertIn("19 人参与", card.picked_label.text())
         card.close()
 
-    def test_config_card_count(self):
-        """配置卡可以设置一次抽几个人，并把数量带出去。"""
-        card = ConfigCard("测试班", _students(), mode=MODE_NO_REPEAT)
-        card.count_spin.setValue(5)
-        got = []
-        card.started.connect(lambda m, d, ex, n: got.append(n))
-        card._on_start()
-        self.assertEqual(got, [5])
+    def test_config_card_locks_drawn_students(self):
+        """不重复模式下已抽中的人不能再参与。"""
+        card = ConfigCard("测试班", _students(), mode=MODE_NO_REPEAT, drawn_nos={"05"})
+        chip = card._chips["05"]
+        self.assertFalse(chip.is_checked())
+        chip.mousePressEvent(_left_click())      # 点了也不该变回选中
+        self.assertFalse(chip.is_checked())
         card.close()
 
     def test_batch_draw(self):
@@ -99,7 +112,8 @@ class TestUiSmoke(unittest.TestCase):
         os.environ["CLASSBOARD_HOME"] = tempfile.mkdtemp()
         try:
             app = app_main.App()
-            app._start_session("no_repeat", 0.6, set(), count=3)
+            app._start_session("no_repeat", 0.9, set())
+            app.draw_window.count_combo.setCurrentText("3")
             app._on_roll()
             self._wait_until(lambda: len(app.draw_window._cards) == 3, timeout_ms=30000)
             self.assertEqual(len(app.draw_window._cards), 3)

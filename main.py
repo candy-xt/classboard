@@ -107,6 +107,7 @@ class App(QObject):
         self.config_card: ConfigCard = None
         self.session_active = False
         self.batch_left = 0          # 本轮还要连抽几个
+        self.base_duration = 4.5     # 用户设定的单次滚动时长
         self.pool = QThreadPool()
         self.signals = Signals()
         self.signals.synced.connect(self._on_synced)
@@ -171,8 +172,7 @@ class App(QObject):
             self.class_name, self.students, mode=mode, duration=duration,
             excluded=excluded, drawn_nos=drawn_nos, edit=edit,
         )
-        card.started.connect(
-            lambda m, d, ex, n: self._on_config_confirmed(m, d, ex, n, edit))
+        card.started.connect(lambda m, d, ex: self._on_config_confirmed(m, d, ex, edit))
         card.cancelled.connect(self._close_config)
         self.config_card = card
         card.show_animated()
@@ -183,27 +183,27 @@ class App(QObject):
             self.config_card.deleteLater()
             self.config_card = None
 
-    def _on_config_confirmed(self, mode, duration, excluded, count, edit):
+    def _on_config_confirmed(self, mode, duration, excluded, edit):
         self._close_config()
         if edit and self.session is not None:
             # 编辑已有会话：保留已抽取记录
             self.session.set_mode(mode)
             self.session.set_duration(duration)
             self.session.set_excluded(excluded)
-            self.batch_left = count
+            self.base_duration = duration
+            self.batch_left = 0
             self._refresh_draw_window()
             return
         # 新会话：先从云端拉一次名单
         if self.cloud_on:
             self.pool.start(PullTask(self.cfg, self.class_name, self.students, self.signals))
-        self._start_session(mode, duration, excluded, count)
+        self._start_session(mode, duration, excluded)
 
-    def _start_session(self, mode, duration, excluded, count=1):
-        # 一次抽多个时把总时长摊到每个上，单个不少于 1.2 秒
-        per = duration if count <= 1 else max(1.2, duration / count)
+    def _start_session(self, mode, duration, excluded):
+        self.base_duration = duration      # 用户设定的单次时长
+        self.batch_left = 0
         self.session = Session(self.class_name, self.students, mode=mode,
-                               duration=per, excluded=excluded)
-        self.batch_left = count
+                               duration=duration, excluded=excluded)
         if self.draw_window is None:
             self.draw_window = DrawWindow(self.class_name)
             self.draw_window.rollRequested.connect(self._on_roll)
@@ -229,9 +229,17 @@ class App(QObject):
     def _on_roll(self):
         if self.session is None or self.draw_window is None:
             return
-        if not self.session.remaining or self.batch_left <= 0:
+        if not self.session.remaining:
             self._end_batch()
             return
+        if self.batch_left <= 0:
+            # 新一轮点击：从界面读"抽几人"，并把总时长摊到每个人身上
+            want = self.draw_window.requested_count()
+            self.batch_left = max(1, min(want, len(self.session.remaining)))
+            per = (self.base_duration if self.batch_left <= 1
+                   else max(1.2, self.base_duration / self.batch_left))
+            self.session.set_duration(per)
+            self.draw_window.set_info(self.session.mode, per)
         # 点击瞬间结果已定；上一轮高亮的人此时才从名单里消失
         winner = self.session.draw()
         if winner is None:

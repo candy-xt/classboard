@@ -17,6 +17,7 @@ from qfluentwidgets import (
     CaptionLabel,
     PrimaryPushButton,
     PushButton,
+    ComboBox,
     StrongBodyLabel,
     SubtitleLabel,
     TitleLabel,
@@ -105,10 +106,16 @@ class DrawWindow(CardWindow):
         roll_row.setSpacing(10)
         self.btn_roll = PrimaryPushButton("开始抽选")
         self.btn_roll.clicked.connect(self.rollRequested.emit)
-        self.roll_hint = CaptionLabel("点击后名单滚动，停下即为抽中结果")
+        self.count_combo = ComboBox()
+        self.count_combo.addItems([str(i) for i in range(1, 21)])
+        self.count_combo.setCurrentIndex(0)
+        self.count_combo.setFixedWidth(84)
+        self.count_combo.setToolTip("本次连续抽取的人数")
+        self.roll_hint = CaptionLabel("停下的就是结果")
         self.roll_hint.setAttribute(Qt.WA_TransparentForMouseEvents)
         roll_row.addStretch(1)
         roll_row.addWidget(self.btn_roll)
+        roll_row.addWidget(self.count_combo)
         roll_row.addWidget(self.roll_hint)
         roll_row.addStretch(1)
         left.addLayout(roll_row)
@@ -202,15 +209,21 @@ class DrawWindow(CardWindow):
             return
         self.reel.roll_to(index, duration)
 
+    def requested_count(self) -> int:
+        """本次要连抽几个人（由界面上的数字框决定）。"""
+        return max(1, int(self.count_combo.currentText()))
+
     def begin_chain(self):
         """连抽模式：整轮结束前不允许重复点开始。"""
         self._chaining = True
         self.btn_roll.setEnabled(False)
+        self.count_combo.setEnabled(False)
         self.btn_finish.setEnabled(True)
 
     def end_chain(self):
         self._chaining = False
         self.btn_roll.setEnabled(True)
+        self.count_combo.setEnabled(True)
         self.btn_finish.setEnabled(True)
 
     def _on_reel_stopped(self):
