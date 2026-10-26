@@ -24,6 +24,7 @@ from qfluentwidgets import (
 )
 
 from .card import CardWindow
+from .theme import SCROLLBAR_QSS
 from .reel import ReelWidget
 
 # 底部按钮配色（Fluent 的 PushButton 是 QPushButton 子类，直接覆盖样式表即可）
@@ -49,22 +50,29 @@ PushButton:disabled { background-color: #a3c0ff; color: #f7f7f7; border-color: #
 
 
 class DrawnCard(QFrame):
-    """右侧已抽取卡片：姓名 + 学号。"""
+    """右侧已抽取卡片：学号 + 姓名，和配置卡的名单卡片同一风格。"""
 
     def __init__(self, student, parent=None):
         super().__init__(parent)
         self.setObjectName("drawnCard")
+        self.setFixedHeight(38)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setStyleSheet(
-            "#drawnCard { background: #f2f6fc; border: 1px solid #dbe6f7;"
-            " border-radius: 10px; }"
+            "#drawnCard { background: #ffffff; border: 1px solid #cfe0f7;"
+            " border-radius: 8px; }"
         )
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 8)
-        layout.setSpacing(0)
-        self.name = StrongBodyLabel(student.name)
-        self.no = CaptionLabel(f"学号 {student.student_no}")
-        layout.addWidget(self.name)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 0, 10, 0)
+        layout.setSpacing(8)
+        self.no = CaptionLabel(str(student.student_no))
+        self.name = BodyLabel(student.name)
+        self.no.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.name.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.no.setStyleSheet("color: #8a8f99; background: transparent;")
+        self.name.setStyleSheet("color: #1f2329; background: transparent;")
         layout.addWidget(self.no)
+        layout.addWidget(self.name)
+        layout.addStretch(1)
 
 
 class DrawWindow(CardWindow):
@@ -111,12 +119,9 @@ class DrawWindow(CardWindow):
         self.count_combo.setCurrentIndex(0)
         self.count_combo.setFixedWidth(84)
         self.count_combo.setToolTip("本次连续抽取的人数")
-        self.roll_hint = CaptionLabel("停下的就是结果")
-        self.roll_hint.setAttribute(Qt.WA_TransparentForMouseEvents)
         roll_row.addStretch(1)
         roll_row.addWidget(self.btn_roll)
         roll_row.addWidget(self.count_combo)
-        roll_row.addWidget(self.roll_hint)
         roll_row.addStretch(1)
         left.addLayout(roll_row)
         left.addStretch(1)
@@ -141,12 +146,15 @@ class DrawWindow(CardWindow):
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll.setStyleSheet(
             "QScrollArea { background: transparent; border: none; }"
-            "QScrollArea > QWidget > QWidget { background: transparent; }")
+            "QScrollArea > QWidget > QWidget { background: transparent; }"
+            + SCROLLBAR_QSS)
         self.holder = QWidget()
         self.grid = QGridLayout(self.holder)
         self.grid.setContentsMargins(0, 0, 0, 0)
-        self.grid.setSpacing(10)
+        self.grid.setSpacing(8)
         self.grid.setAlignment(Qt.AlignTop)
+        self.grid.setColumnStretch(0, 1)
+        self.grid.setColumnStretch(1, 1)
         self.scroll.setWidget(self.holder)
         right.addWidget(self.scroll, 1)
         body.addLayout(right, 1)
@@ -225,6 +233,13 @@ class DrawWindow(CardWindow):
         self.btn_roll.setEnabled(True)
         self.count_combo.setEnabled(True)
         self.btn_finish.setEnabled(True)
+
+    def show_exhausted(self):
+        """不重复模式把所有人抽完后的提示。"""
+        self.reel.set_rows([])
+        self.reel.set_message("所有人已抽完\n请点击「重置并关闭」重新开始")
+        self.btn_roll.setEnabled(False)
+        self.count_combo.setEnabled(False)
 
     def _on_reel_stopped(self):
         """卷轴停稳：把中奖者放进右侧列表并通知外部。"""

@@ -217,6 +217,7 @@ class App(QObject):
             self.draw_window.raise_()
         else:
             self.draw_window.show_animated()
+        self.draw_window.end_chain()      # 新会话恢复按钮（上一轮可能停在"已抽完"）
         self.session_active = True
         self.ball.set_text("继续点名")
 
@@ -264,6 +265,9 @@ class App(QObject):
         self.batch_left = 0
         if self.draw_window is not None:
             self.draw_window.end_chain()
+            # 不重复模式把全班抽完了：提示重置，并且不让再点开始
+            if self.session is not None and not self.session.remaining:
+                self.draw_window.show_exhausted()
 
     def _on_finish(self):
         """重置并关闭：清空本轮结果，回到初始状态。"""

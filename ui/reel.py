@@ -34,11 +34,17 @@ class ReelWidget(QWidget):
         self._pos = 0.0          # 中心位置（行号，可为小数）
         self._rolling = False
         self._plan = None        # 本轮滚动的运动学参数
+        self._message = "名单为空"
         self._clock = QElapsedTimer()
         self._timer = QTimer(self)
         self._timer.setInterval(16)
         self._timer.timeout.connect(self._tick)
         self.setFixedHeight(ROW_H * VISIBLE_ROWS)
+
+    def set_message(self, text: str):
+        """名单为空时显示的提示文字。"""
+        self._message = text
+        self.update()
 
     # ------------------------------------------------------------------
     def set_rows(self, rows):
@@ -47,6 +53,7 @@ class ReelWidget(QWidget):
         self._pos = 0.0
         self._rolling = False
         self._plan = None
+        self._message = "名单为空"
         self._timer.stop()
         self.update()
 
@@ -161,8 +168,12 @@ class ReelWidget(QWidget):
         painter.fillRect(self.rect(), QColor("#ffffff"))
 
         if not self._rows:
+            font = QFont(self.font())
+            font.setPointSize(12)
+            painter.setFont(font)
             painter.setPen(QColor("#8a8f99"))
-            painter.drawText(self.rect(), Qt.AlignCenter, "名单为空")
+            painter.drawText(self.rect().adjusted(24, 0, -24, 0),
+                             Qt.AlignCenter | Qt.TextWordWrap, self._message)
             painter.end()
             return
 

@@ -24,6 +24,7 @@ from qfluentwidgets import (
 )
 
 from .card import CardWindow
+from .theme import SCROLLBAR_QSS
 
 MODE_REPEAT = "repeat"
 MODE_NO_REPEAT = "no_repeat"
@@ -197,7 +198,8 @@ class ConfigCard(CardWindow):
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll.setStyleSheet(
             "QScrollArea { background: transparent; border: none; }"
-            "QScrollArea > QWidget > QWidget { background: transparent; }")
+            "QScrollArea > QWidget > QWidget { background: transparent; }"
+            + SCROLLBAR_QSS)
 
         holder = QWidget()
         grid = QGridLayout(holder)
