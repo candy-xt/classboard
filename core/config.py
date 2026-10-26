@@ -104,8 +104,22 @@ def load_window_position(name: str = "ball"):
     return None
 
 
-def save_window_position(name: str, x: int, y: int) -> None:
-    """保存窗口坐标（失败不影响使用）。"""
+def load_ui_setting(key: str, default=None):
+    """读取界面相关的持久化设置（滚动时长等）；没有或损坏时返回默认值。"""
+    path = _ui_path()
+    if not path.exists():
+        return default
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+    if not isinstance(data, dict):
+        return default
+    return data.get(key, default)
+
+
+def save_ui_setting(key: str, value) -> None:
+    """保存界面设置（失败不影响使用）。"""
     path = _ui_path()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -115,7 +129,14 @@ def save_window_position(name: str, x: int, y: int) -> None:
                 data = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 data = {}
-        data[name] = [int(x), int(y)]
+            if not isinstance(data, dict):
+                data = {}
+        data[key] = value
         path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    except (OSError, ValueError):
+    except OSError:
         pass
+
+
+def save_window_position(name: str, x: int, y: int) -> None:
+    """保存窗口坐标（失败不影响使用）。"""
+    save_ui_setting(name, [int(x), int(y)])

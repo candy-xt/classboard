@@ -9,7 +9,7 @@ import uuid
 
 
 class Session:
-    def __init__(self, class_name, students, mode="no_repeat", duration=4.5, excluded=None):
+    def __init__(self, class_name, students, mode="no_repeat", duration=3.0, excluded=None):
         self.class_name = class_name
         self.mode = mode
         self.duration = float(duration)

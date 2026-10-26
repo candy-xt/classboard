@@ -227,3 +227,41 @@ class TestEncodingFallback(unittest.TestCase):
         class_name, students = load_roster(p)
         self.assertEqual(class_name, "0105")
         self.assertEqual(students[0].name, "张淏舜")
+
+
+class TestDurationPersistence(unittest.TestCase):
+    """滚动时长要记住上次的值，下次打开自动恢复。"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["CLASSBOARD_HOME"] = self.tmp
+
+    def tearDown(self):
+        os.environ.pop("CLASSBOARD_HOME", None)
+
+    def test_default_is_three(self):
+        from core.config import load_ui_setting
+        self.assertEqual(load_ui_setting("duration", 3.0), 3.0)
+
+    def test_save_and_load(self):
+        from core.config import load_ui_setting, save_ui_setting
+        save_ui_setting("duration", 6.5)
+        self.assertEqual(load_ui_setting("duration", 3.0), 6.5)
+        # 与窗口位置共存，互不覆盖
+        save_ui_setting("ball", [10, 20])
+        self.assertEqual(load_ui_setting("duration", 3.0), 6.5)
+        self.assertEqual(load_ui_setting("ball"), [10, 20])
+
+    def test_clamped_by_app(self):
+        from core.config import save_ui_setting
+        import main as app_main
+        save_ui_setting("duration", 99)
+        old = os.environ.get("CLASSBOARD_HOME")
+        try:
+            app = app_main.App()
+            self.assertEqual(app._saved_duration(), 10.0)
+        finally:
+            if old is None:
+                os.environ.pop("CLASSBOARD_HOME", None)
+            else:
+                os.environ["CLASSBOARD_HOME"] = old

@@ -100,7 +100,7 @@ class ConfigCard(CardWindow):
     started = Signal(str, float, set)   # mode, duration, excluded student_no
     cancelled = Signal()
 
-    def __init__(self, class_name, students, mode=MODE_NO_REPEAT, duration=4.5,
+    def __init__(self, class_name, students, mode=MODE_NO_REPEAT, duration=3.0,
                  excluded=None, drawn_nos=None, edit=False, parent=None):
         super().__init__(width=860, height=620, parent=parent)
         self.class_name = class_name

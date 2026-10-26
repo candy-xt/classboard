@@ -23,7 +23,14 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
 from core import cloud, net
-from core.config import cloud_enabled, load_config, load_window_position, save_window_position
+from core.config import (
+    cloud_enabled,
+    load_config,
+    load_ui_setting,
+    load_window_position,
+    save_ui_setting,
+    save_window_position,
+)
 from core.roster import load_roster
 from core.session import Session
 from ui.config_card import MODE_NO_REPEAT, MODE_REPEAT, ConfigCard
@@ -107,7 +114,7 @@ class App(QObject):
         self.config_card: ConfigCard = None
         self.session_active = False
         self.batch_left = 0          # 本轮还要连抽几个
-        self.base_duration = 4.5     # 用户设定的单次滚动时长
+        self.base_duration = 3.0     # 用户设定的单次滚动时长
         self.pool = QThreadPool()
         self.signals = Signals()
         self.signals.synced.connect(self._on_synced)
@@ -159,12 +166,12 @@ class App(QObject):
 
         if edit and self.session is not None:
             mode = self.session.mode
-            duration = self.session.duration
+            duration = self.base_duration
             excluded = set(self.session.excluded)
             drawn_nos = {s.student_no for s in self.session.drawn}
         else:
             mode = MODE_NO_REPEAT
-            duration = 4.5
+            duration = self._saved_duration()
             excluded = set()
             drawn_nos = set()
 
@@ -183,8 +190,17 @@ class App(QObject):
             self.config_card.deleteLater()
             self.config_card = None
 
+    def _saved_duration(self) -> float:
+        """读取上次用过的滚动时长，没有则用默认 3.0 秒。"""
+        try:
+            value = float(load_ui_setting("duration", 3.0))
+        except (TypeError, ValueError):
+            value = 3.0
+        return min(10.0, max(1.0, value))
+
     def _on_config_confirmed(self, mode, duration, excluded, edit):
         self._close_config()
+        save_ui_setting("duration", round(float(duration), 1))   # 记住这次的选择
         if edit and self.session is not None:
             # 编辑已有会话：保留已抽取记录
             self.session.set_mode(mode)
