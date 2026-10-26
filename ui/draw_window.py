@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QScrollArea,
+    QScroller,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -23,6 +24,27 @@ from qfluentwidgets import (
 
 from .card import CardWindow
 from .reel import ReelWidget
+
+# 底部按钮配色（Fluent 的 PushButton 是 QPushButton 子类，直接覆盖样式表即可）
+_RED_BTN = """
+PushButton {
+    background-color: #d13438; color: #ffffff;
+    border: 1px solid #c22b2f; border-radius: 5px; padding: 5px 16px;
+}
+PushButton:hover { background-color: #e04448; }
+PushButton:pressed { background-color: #a82226; }
+PushButton:disabled { background-color: #e2a1a3; color: #f7f7f7; border-color: #e2a1a3; }
+"""
+
+_BLUE_BTN = """
+PushButton {
+    background-color: #0f62fe; color: #ffffff;
+    border: 1px solid #0b57e0; border-radius: 5px; padding: 5px 16px;
+}
+PushButton:hover { background-color: #2f78ff; }
+PushButton:pressed { background-color: #0a4fd0; }
+PushButton:disabled { background-color: #a3c0ff; color: #f7f7f7; border-color: #a3c0ff; }
+"""
 
 
 class DrawnCard(QFrame):
@@ -57,6 +79,7 @@ class DrawWindow(CardWindow):
         self._cards = []
         self._snapshot = []
         self._pending = None
+        self._chaining = False
 
         title = TitleLabel("随机点名")
         title.setAttribute(Qt.WA_TransparentForMouseEvents)
@@ -109,6 +132,9 @@ class DrawWindow(CardWindow):
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.NoFrame)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+            "QScrollArea > QWidget > QWidget { background: transparent; }")
         self.holder = QWidget()
         self.grid = QGridLayout(self.holder)
         self.grid.setContentsMargins(0, 0, 0, 0)
@@ -123,9 +149,11 @@ class DrawWindow(CardWindow):
         # 底部工具栏
         toolbar = QHBoxLayout()
         toolbar.setSpacing(10)
-        self.btn_finish = PrimaryPushButton("结束本次抽取")
+        self.btn_finish = PushButton("重置并关闭")
+        self.btn_finish.setStyleSheet(_RED_BTN)
         self.btn_finish.clicked.connect(self.finished.emit)
-        self.btn_leave = PushButton("暂离")
+        self.btn_leave = PushButton('暂离（临时关闭本窗口，点击“继续点名”重新打开）')
+        self.btn_leave.setStyleSheet(_BLUE_BTN)
         self.btn_leave.clicked.connect(self.leaveRequested.emit)
         self.btn_edit = PushButton("修改配置")
         self.btn_edit.clicked.connect(self.editRequested.emit)
@@ -138,6 +166,10 @@ class DrawWindow(CardWindow):
         self._empty_hint = BodyLabel("还没有抽过任何人")
         self._empty_hint.setAlignment(Qt.AlignCenter)
         self.grid.addWidget(self._empty_hint, 0, 0, 1, 2)
+
+        # 触摸屏拖动滚动（Windows 上触摸会被合成为鼠标事件，所以用鼠标拖拽手势）
+        QScroller.grabGesture(self.scroll.viewport(),
+                              QScroller.ScrollerGestureType.LeftMouseButtonGesture)
 
     # ------------------------------------------------------------------
     def set_pool(self, students):
@@ -170,11 +202,23 @@ class DrawWindow(CardWindow):
             return
         self.reel.roll_to(index, duration)
 
+    def begin_chain(self):
+        """连抽模式：整轮结束前不允许重复点开始。"""
+        self._chaining = True
+        self.btn_roll.setEnabled(False)
+        self.btn_finish.setEnabled(True)
+
+    def end_chain(self):
+        self._chaining = False
+        self.btn_roll.setEnabled(True)
+        self.btn_finish.setEnabled(True)
+
     def _on_reel_stopped(self):
         """卷轴停稳：把中奖者放进右侧列表并通知外部。"""
         winner = self._pending
         self._pending = None
-        self.btn_roll.setEnabled(True)
+        if not self._chaining:
+            self.btn_roll.setEnabled(True)
         self.btn_finish.setEnabled(True)
         if winner is None:
             return

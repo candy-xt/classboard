@@ -79,6 +79,38 @@ class TestUiSmoke(unittest.TestCase):
         self.assertIn("03", card.excluded)
         card.close()
 
+    def test_config_card_count(self):
+        """配置卡可以设置一次抽几个人，并把数量带出去。"""
+        card = ConfigCard("测试班", _students(), mode=MODE_NO_REPEAT)
+        card.count_spin.setValue(5)
+        got = []
+        card.started.connect(lambda m, d, ex, n: got.append(n))
+        card._on_start()
+        self.assertEqual(got, [5])
+        card.close()
+
+    def test_batch_draw(self):
+        """一次抽 N 人：自动连抽，结束后按钮恢复可用。"""
+        import tempfile
+
+        import main as app_main
+
+        old_home = os.environ.get("CLASSBOARD_HOME")
+        os.environ["CLASSBOARD_HOME"] = tempfile.mkdtemp()
+        try:
+            app = app_main.App()
+            app._start_session("no_repeat", 0.6, set(), count=3)
+            app._on_roll()
+            self._wait_until(lambda: len(app.draw_window._cards) == 3, timeout_ms=30000)
+            self.assertEqual(len(app.draw_window._cards), 3)
+            self.assertEqual(app.batch_left, 0)
+            self.assertTrue(app.draw_window.btn_roll.isEnabled())
+        finally:
+            if old_home is None:
+                os.environ.pop("CLASSBOARD_HOME", None)
+            else:
+                os.environ["CLASSBOARD_HOME"] = old_home
+
     def test_draw_window_roll(self):
         students = _students()
         session = Session("测试班", students, mode=MODE_NO_REPEAT, duration=0.1)
@@ -224,7 +256,7 @@ class TestUiSmoke(unittest.TestCase):
 
             # 暂离 / 结束
             app._on_leave()
-            self.assertEqual(app.ball.label.text(), "继续点名...")
+            self.assertEqual(app.ball.label.text(), "继续点名")
             app._on_finish()
             self.assertEqual(app.ball.label.text(), "随机点名")
             self.assertFalse(app.session_active)

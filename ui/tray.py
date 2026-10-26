@@ -1,6 +1,6 @@
 """系统托盘：右键菜单可显示/隐藏悬浮窗，也可退出程序。"""
-from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QObject, QPoint, QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QCursor, QGuiApplication, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QSystemTrayIcon
 
 from qfluentwidgets import Action, FluentIcon, RoundMenu
@@ -45,12 +45,28 @@ class TrayIcon(QObject):
         self.act_quit.triggered.connect(lambda: self.quitRequested.emit())
         self.menu.addAction(self.act_quit)
 
-        self.tray.setContextMenu(self.menu)
+        self.tray.setContextMenu(None)      # 菜单由我们自己摆位置，避免超出屏幕
         self.tray.activated.connect(self._on_activated)
 
     def _on_activated(self, reason):
         if reason == QSystemTrayIcon.Trigger:      # 左键单击托盘图标
             self.toggleRequested.emit()
+        elif reason == QSystemTrayIcon.Context:    # 右键
+            self.popup_menu()
+
+    def popup_menu(self):
+        """弹出菜单，并保证整块菜单落在任务栏上方的可见区域内。"""
+        self.menu.ensurePolished()
+        self.menu.adjustSize()
+        size = self.menu.sizeHint()
+
+        pos = QCursor.pos()
+        screen = QGuiApplication.screenAt(pos) or QGuiApplication.primaryScreen()
+        area = screen.availableGeometry()          # 已排除任务栏
+
+        x = min(max(pos.x(), area.left()), area.right() - size.width())
+        y = min(max(pos.y(), area.top()), area.bottom() - size.height())
+        self.menu.exec(QPoint(x, y))
 
     def set_ball_visible(self, visible: bool):
         self.act_toggle.setText("隐藏悬浮窗" if visible else "显示悬浮窗")

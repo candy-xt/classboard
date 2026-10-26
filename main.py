@@ -19,7 +19,7 @@ elif sys.platform.startswith("linux") and not os.environ.get("QT_QPA_PLATFORM"):
     if os.environ.get("WAYLAND_DISPLAY") or "wayland" in os.environ.get("XDG_SESSION_TYPE", ""):
         os.environ["QT_QPA_PLATFORM"] = "xcb"
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
 from core import cloud, net
@@ -106,6 +106,7 @@ class App(QObject):
         self.draw_window: DrawWindow = None
         self.config_card: ConfigCard = None
         self.session_active = False
+        self.batch_left = 0          # 本轮还要连抽几个
         self.pool = QThreadPool()
         self.signals = Signals()
         self.signals.synced.connect(self._on_synced)
@@ -170,7 +171,8 @@ class App(QObject):
             self.class_name, self.students, mode=mode, duration=duration,
             excluded=excluded, drawn_nos=drawn_nos, edit=edit,
         )
-        card.started.connect(lambda m, d, ex: self._on_config_confirmed(m, d, ex, edit))
+        card.started.connect(
+            lambda m, d, ex, n: self._on_config_confirmed(m, d, ex, n, edit))
         card.cancelled.connect(self._close_config)
         self.config_card = card
         card.show_animated()
@@ -181,23 +183,27 @@ class App(QObject):
             self.config_card.deleteLater()
             self.config_card = None
 
-    def _on_config_confirmed(self, mode, duration, excluded, edit):
+    def _on_config_confirmed(self, mode, duration, excluded, count, edit):
         self._close_config()
         if edit and self.session is not None:
             # 编辑已有会话：保留已抽取记录
             self.session.set_mode(mode)
             self.session.set_duration(duration)
             self.session.set_excluded(excluded)
+            self.batch_left = count
             self._refresh_draw_window()
             return
         # 新会话：先从云端拉一次名单
         if self.cloud_on:
             self.pool.start(PullTask(self.cfg, self.class_name, self.students, self.signals))
-        self._start_session(mode, duration, excluded)
+        self._start_session(mode, duration, excluded, count)
 
-    def _start_session(self, mode, duration, excluded):
+    def _start_session(self, mode, duration, excluded, count=1):
+        # 一次抽多个时把总时长摊到每个上，单个不少于 1.2 秒
+        per = duration if count <= 1 else max(1.2, duration / count)
         self.session = Session(self.class_name, self.students, mode=mode,
-                               duration=duration, excluded=excluded)
+                               duration=per, excluded=excluded)
+        self.batch_left = count
         if self.draw_window is None:
             self.draw_window = DrawWindow(self.class_name)
             self.draw_window.rollRequested.connect(self._on_roll)
@@ -212,7 +218,7 @@ class App(QObject):
         else:
             self.draw_window.show_animated()
         self.session_active = True
-        self.ball.set_text("继续点名...")
+        self.ball.set_text("继续点名")
 
     def _refresh_draw_window(self):
         if self.draw_window is None or self.session is None:
@@ -221,14 +227,17 @@ class App(QObject):
         self.draw_window.set_pool(self.session.remaining)
     # ------------------------------------------------------------------
     def _on_roll(self):
-        if self.session is None:
+        if self.session is None or self.draw_window is None:
             return
-        if not self.session.remaining:
+        if not self.session.remaining or self.batch_left <= 0:
+            self._end_batch()
             return
         # 点击瞬间结果已定；上一轮高亮的人此时才从名单里消失
         winner = self.session.draw()
         if winner is None:
+            self._end_batch()
             return
+        self.draw_window.begin_chain()
         self.draw_window.start_roll(winner, self.session.remaining, self.session.duration)
 
     def _on_drawn(self, student):
@@ -237,22 +246,34 @@ class App(QObject):
             self.pool.start(ReportTask(
                 self.cfg, self.class_name, student, self.session.mode,
                 session_id=self.session.session_id))
+        self.batch_left -= 1
+        if self.batch_left > 0 and self.session.remaining:
+            QTimer.singleShot(350, self._on_roll)   # 连抽：稍作停顿接着抽下一个
+        else:
+            self._end_batch()
+
+    def _end_batch(self):
+        self.batch_left = 0
+        if self.draw_window is not None:
+            self.draw_window.end_chain()
 
     def _on_finish(self):
-        """结束本次抽取：固化结果并回到初始状态。"""
+        """重置并关闭：清空本轮结果，回到初始状态。"""
+        self.batch_left = 0
         if self.session is not None:
             self.session.reset()
         if self.draw_window is not None:
+            self.draw_window.end_chain()
             self.draw_window.clear_drawn()
             self.draw_window.hide()
         self.session_active = False
         self.ball.set_text("随机点名")
 
     def _on_leave(self):
-        """暂离：保留已抽取和配置，悬浮球变为"继续点名..."。"""
+        """暂离：保留已抽取和配置，悬浮球变为"继续点名"。"""
         if self.draw_window is not None:
             self.draw_window.hide()
-        self.ball.set_text("继续点名...")
+        self.ball.set_text("继续点名")
 
     def _toggle_ball(self):
         """托盘菜单 / 单击托盘图标：显示或隐藏悬浮窗。"""

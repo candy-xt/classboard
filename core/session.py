@@ -3,9 +3,9 @@
 UI 只负责"演出"，结果在 draw() 调用瞬间就定下来了。
 当前抽中的人会留在展示名单里（带高亮），直到下一次抽取开始才被移除。
 """
-import uuid
-
 from .picker import Picker
+
+import uuid
 
 
 class Session:

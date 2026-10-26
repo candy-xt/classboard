@@ -1,4 +1,4 @@
-"""右下角悬浮球：图标 + "随机点名"，会话进行中变为"继续点名..."。"""
+"""右下角悬浮球：图标 + "随机点名"，会话进行中变为"继续点名"。"""
 from PySide6.QtCore import QEvent, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPainterPath
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QMenu, QWidget

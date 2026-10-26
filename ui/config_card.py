@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
     QHeaderView,
+    QScroller,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -18,6 +19,7 @@ from qfluentwidgets import (
     PushButton,
     SegmentedWidget,
     Slider,
+    SpinBox,
     StrongBodyLabel,
     SubtitleLabel,
     TableWidget,
@@ -33,7 +35,7 @@ MODE_NO_REPEAT = "no_repeat"
 class ConfigCard(CardWindow):
     """开始前配置；编辑模式下保留已抽取状态。"""
 
-    started = Signal(str, float, set)   # mode, duration, excluded student_no
+    started = Signal(str, float, set, int)   # mode, duration, excluded student_no, count
     cancelled = Signal()
 
     def __init__(self, class_name, students, mode=MODE_NO_REPEAT, duration=4.5,
@@ -85,10 +87,27 @@ class ConfigCard(CardWindow):
         self.duration_label.setText(f"{duration:.1f} 秒")
         self.card_layout.addWidget(self.slider)
 
+        # 抽取人数（一次点选连续抽几个）
+        count_row = QHBoxLayout()
+        count_row.setContentsMargins(0, 0, 0, 0)
+        count_label = BodyLabel("抽取人数")
+        count_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.count_spin = SpinBox()
+        self.count_spin.setRange(1, max(1, len(self.students)))
+        self.count_spin.setValue(1)
+        count_row.addWidget(count_label)
+        count_row.addStretch(1)
+        count_row.addWidget(self.count_spin)
+        self.card_layout.addLayout(count_row)
+
         # 名单
         self.card_layout.addWidget(StrongBodyLabel("学生名单（取消勾选 = 本次不参与）"))
         self.table = self._build_table()
         self.card_layout.addWidget(self.table, 1)
+
+        # 触摸屏拖动滚动名单
+        QScroller.grabGesture(self.table.viewport(),
+                              QScroller.ScrollerGestureType.LeftMouseButtonGesture)
 
         # 按钮
         buttons = QHBoxLayout()
@@ -157,4 +176,9 @@ class ConfigCard(CardWindow):
             no for no, cb in self._checkboxes.items() if not cb.isChecked()
         }
         self.excluded = excluded
-        self.started.emit(self.mode, self.slider.value() / 10.0, excluded)
+        # 可抽人数：去掉未勾选的和（不重复模式下）已经抽过的
+        available = len(self.students) - len(excluded)
+        if self.mode == MODE_NO_REPEAT:
+            available -= len([n for n in self.drawn_nos if n not in excluded])
+        count = max(1, min(self.count_spin.value(), max(1, available)))
+        self.started.emit(self.mode, self.slider.value() / 10.0, excluded, count)
