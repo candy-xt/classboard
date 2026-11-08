@@ -58,13 +58,18 @@ def _load_cache(class_name: str):
 
 
 def resolve_students(cfg, class_name: str, local_students, online: bool = True):
-    """返回 (students, source)，source ∈ {'cloud', 'cache', 'local'}。"""
+    """返回 (students, source, cloud_draw)。
+
+    source ∈ {'cloud', 'cache', 'local'}；cloud_draw 表示服务端是否允许代抽。
+    缓存/离线时一律 False —— 不能因为上次开过就擅自让云端决定。
+    """
     local = [Student(s.student_no, s.name, 1.0) for s in local_students]
     if not cloud_enabled(cfg, class_name):
-        return local, "local"
+        return local, "local", False
     if online:
         remote = net.pull_config(cfg, class_name)
         if remote:
+            cloud_draw = bool(remote.get("cloud_draw"))
             students = []
             for row in remote.get("students") or []:
                 try:
@@ -75,11 +80,11 @@ def resolve_students(cfg, class_name: str, local_students, online: bool = True):
                     continue
             if students:
                 _save_cache(class_name, students)
-                return students, "cloud"
+                return students, "cloud", cloud_draw
     cached = _load_cache(class_name)
     if cached:
-        return cached, "cache"
-    return local, "local"
+        return cached, "cache", False
+    return local, "local", False
 
 
 def sync_startup(cfg, class_name: str, students, online: bool = True):

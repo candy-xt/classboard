@@ -12,20 +12,21 @@ from .config import ClientConfig
 TIMEOUT = 5  # 秒；教室网络差时快速失败走降级
 
 
-def _request(cfg: ClientConfig, method: str, path: str, payload=None, params=None):
+def _request(cfg: ClientConfig, method: str, path: str, payload=None, params=None,
+             timeout=None):
     url = cfg.server + path
     if params:
         url += "?" + urlencode(params)
     data = None
     if payload is not None:
         data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(url, data=data, method=method)
-    req.add_header("X-Client-Id", cfg.client_id)
-    req.add_header("X-Key", cfg.key)
-    if data is not None:
-        req.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("X-Client-Id", cfg.client_id)
+        req.add_header("X-Key", cfg.key)
+        if data is not None:
+            req.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(req, timeout=timeout or TIMEOUT) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except Exception:
         return None
@@ -43,6 +44,32 @@ def upload_roster(cfg: ClientConfig, class_name: str, students) -> bool:
 def pull_config(cfg: ClientConfig, class_name: str):
     """拉取该班名单+权重；失败返回 None。"""
     return _request(cfg, "GET", "/api/config", params={"class_name": class_name})
+
+
+def cloud_draw(cfg: ClientConfig, class_name: str, mode: str, candidates, drawn):
+    """请服务端决定抽到谁；开关关闭 / 网络失败时返回 None（调用方回退本地抽取）。
+
+    超时压得比较短：这一步在点击瞬间同步执行，不能让老师干等着。
+    """
+    payload = {
+        "class_name": class_name,
+        "mode": mode,
+        "candidates": [
+            {"student_no": s.student_no, "name": s.name, "weight": float(s.weight)}
+            for s in candidates
+        ],
+        "drawn": list(drawn),
+    }
+    resp = _request(cfg, "POST", "/api/draw", payload, timeout=1.5)
+    if not resp or not resp.get("ok"):
+        return None
+    picked = (resp.get("pick") or {}).get("student_no")
+    if not picked:
+        return None
+    for s in candidates:          # 返回原对象，保持权重等字段一致
+        if s.student_no == picked:
+            return s
+    return None
 
 
 def report_result(cfg: ClientConfig, class_name: str, student, mode: str,

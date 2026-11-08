@@ -64,6 +64,13 @@ class Session:
         self._current = winner
         return winner
 
+    def accept(self, student):
+        """采用云端给出的结果（云端代抽），登记到已抽取里。"""
+        self._current = None
+        self.picker.record(student)
+        self._current = student
+        return student
+
     def reset(self):
         """结束本次抽取：清空已抽取记录，回到初始状态。"""
         self.picker.reset()

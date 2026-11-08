@@ -30,6 +30,7 @@ def _make_icon(size: int = 64) -> QIcon:
 class TrayIcon(QObject):
     toggleRequested = Signal()
     quitRequested = Signal()
+    updateRequested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -37,6 +38,11 @@ class TrayIcon(QObject):
         self.tray.setToolTip("ClassBoard · 随机点名")
 
         self.menu = RoundMenu()
+        self.act_update = Action(FluentIcon.SYNC, "检查更新")
+        self.act_update.triggered.connect(lambda: self.updateRequested.emit())
+        self.menu.addAction(self.act_update)
+        self.menu.addSeparator()
+
         self.act_toggle = Action(FluentIcon.VIEW, "隐藏悬浮窗")
         self.act_toggle.triggered.connect(lambda: self.toggleRequested.emit())
         self.menu.addAction(self.act_toggle)
@@ -70,6 +76,14 @@ class TrayIcon(QObject):
 
     def set_ball_visible(self, visible: bool):
         self.act_toggle.setText("隐藏悬浮窗" if visible else "显示悬浮窗")
+
+    def set_update_state(self, text: str, enabled: bool = True):
+        self.act_update.setText(text)
+        self.act_update.setEnabled(enabled)
+
+    def notify(self, title: str, message: str):
+        """气泡提示，不打断当前操作。"""
+        self.tray.showMessage(title, message, _make_icon(64), 4000)
 
     def show(self):
         self.tray.show()

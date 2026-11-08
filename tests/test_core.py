@@ -85,21 +85,31 @@ class TestPicker(unittest.TestCase):
             Student("03", "王五", 3.0),
         ]
 
-    def test_zero_weight_never_picked(self):
+    def test_zero_weight_comes_last(self):
+        """0 权重不是抽不到，而是排在所有正权重之后。"""
+        picker = Picker(self.students, repeat=False)
+        picked = [picker.pick().student_no for _ in range(3)]
+        self.assertEqual(set(picked[:2]), {"01", "03"})   # 先抽有权重的
+        self.assertEqual(picked[2], "02")                  # 最后才轮到 0 权重
+        self.assertIsNone(picker.pick())                   # 全抽完了
+
+    def test_zero_weight_never_when_repeat(self):
+        """重复模式下正权重的人一直在，0 权重的人轮不到。"""
         picker = Picker(self.students, repeat=True)
-        for _ in range(500):
+        for _ in range(300):
             self.assertNotEqual(picker.pick().student_no, "02")
 
     def test_no_repeat_has_no_duplicates(self):
         picker = Picker(self.students, repeat=False)
-        picked = [picker.pick().student_no for _ in range(2)]
+        picked = [picker.pick().student_no for _ in range(3)]
         self.assertEqual(len(picked), len(set(picked)))
-        self.assertNotIn("02", picked)  # 权重 0 的人抽不到
-        self.assertIsNone(picker.pick())  # 池子空了
 
-    def test_all_zero_weight_returns_none(self):
-        picker = Picker([Student("01", "张三", 0.0)], repeat=True)
-        self.assertIsNone(picker.pick())
+    def test_all_zero_weight_still_picks(self):
+        """全班都被锁 0 时依然能抽，不能出现点了没反应。"""
+        picker = Picker([Student("01", "张三", 0.0),
+                         Student("02", "李四", 0.0)], repeat=True)
+        for _ in range(50):
+            self.assertIn(picker.pick().student_no, {"01", "02"})
 
     def test_negative_weight_treated_as_zero(self):
         picker = Picker([Student("01", "张三", -5.0), Student("02", "李四", 1.0)],
@@ -136,31 +146,34 @@ class TestCloudFallback(unittest.TestCase):
 
     def test_not_in_whitelist_uses_local_equal_weights(self):
         cfg = ClientConfig(server="http://x", key="k", client_id="c", whitelist=["其他班"])
-        students, source = cloud.resolve_students(cfg, "高一(3)班", self.local)
+        students, source, cloud_draw = cloud.resolve_students(cfg, "高一(3)班", self.local)
         self.assertEqual(source, "local")
         self.assertTrue(all(s.weight == 1.0 for s in students))
 
     def test_cloud_then_cache_then_local(self):
         remote = {"class": "高一(3)班", "students": [
             {"student_no": "01", "name": "张三", "weight": 0.3},
-            {"student_no": "02", "name": "李四", "weight": 1.0}]}
+            {"student_no": "02", "name": "李四", "weight": 1.0}],
+            "cloud_draw": True}
         original = net.pull_config
 
         net.pull_config = lambda cfg, name: remote
-        students, source = cloud.resolve_students(self.cfg, "高一(3)班", self.local)
+        students, source, cloud_draw = cloud.resolve_students(self.cfg, "高一(3)班", self.local)
         self.assertEqual(source, "cloud")
         self.assertEqual(students[0].weight, 0.3)
+        self.assertTrue(cloud_draw)          # 服务端开了代抽
 
         # 断网 → 用缓存
         net.pull_config = lambda cfg, name: None
-        students, source = cloud.resolve_students(self.cfg, "高一(3)班", self.local)
+        students, source, cloud_draw = cloud.resolve_students(self.cfg, "高一(3)班", self.local)
         self.assertEqual(source, "cache")
         self.assertEqual(students[0].weight, 0.3)
+        self.assertFalse(cloud_draw)         # 走缓存时不代抽
 
         # 缓存也没有 → 本地均权
         for f in Path(self.tmp).glob("cache_*.json"):
             f.unlink()
-        students, source = cloud.resolve_students(self.cfg, "高一(3)班", self.local)
+        students, source, cloud_draw = cloud.resolve_students(self.cfg, "高一(3)班", self.local)
         self.assertEqual(source, "local")
         self.assertTrue(all(s.weight == 1.0 for s in students))
 

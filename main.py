@@ -22,7 +22,7 @@ elif sys.platform.startswith("linux") and not os.environ.get("QT_QPA_PLATFORM"):
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import QApplication
 
-from core import cloud, net
+from core import cloud, net, update
 from core.config import (
     cloud_enabled,
     load_config,
@@ -48,8 +48,9 @@ def app_dir() -> Path:
 
 
 class Signals(QObject):
-    synced = Signal(list, str)      # 名单(含权重), 来源
+    synced = Signal(list, str, bool)   # 名单(含权重), 来源, 是否允许云端代抽
     reported = Signal(bool)
+    updateReady = Signal(str, str)     # 解压后的目录(空=失败), 版本号
 
 
 class SyncTask(QRunnable):
@@ -61,8 +62,9 @@ class SyncTask(QRunnable):
         self.signals = signals
 
     def run(self):
-        students, source = cloud.sync_startup(self.cfg, self.class_name, self.students)
-        self.signals.synced.emit(students, source)
+        students, source, cloud_draw = cloud.sync_startup(
+            self.cfg, self.class_name, self.students)
+        self.signals.synced.emit(students, source, cloud_draw)
 
 
 class PullTask(QRunnable):
@@ -74,8 +76,34 @@ class PullTask(QRunnable):
         self.signals = signals
 
     def run(self):
-        students, source = cloud.resolve_students(self.cfg, self.class_name, self.students)
-        self.signals.synced.emit(students, source)
+        students, source, cloud_draw = cloud.resolve_students(
+            self.cfg, self.class_name, self.students)
+        self.signals.synced.emit(students, source, cloud_draw)
+
+
+class UpdateTask(QRunnable):
+    """后台检查并下载更新包，全程不打扰前台。"""
+
+    def __init__(self, cfg, signals):
+        super().__init__()
+        self.cfg, self.signals = cfg, signals
+
+    def run(self):
+        info = update.check(self.cfg)
+        if not info or not info.get("available"):
+            self.signals.updateReady.emit("", "")
+            return
+        work = update.workdir()
+        zip_path = work / "ClassBoard.zip"
+        if update.download(self.cfg, zip_path) is None:
+            self.signals.updateReady.emit("", "")
+            return
+        try:
+            src = update.prepare(zip_path, work)
+        except Exception:
+            self.signals.updateReady.emit("", "")
+            return
+        self.signals.updateReady.emit(str(src), str(info.get("version") or ""))
 
 
 class ReportTask(QRunnable):
@@ -115,9 +143,12 @@ class App(QObject):
         self.session_active = False
         self.batch_left = 0          # 本轮还要连抽几个
         self.base_duration = 3.0     # 用户设定的单次滚动时长
+        self.cloud_draw = False      # 服务端是否允许代抽（每次同步刷新）
+        self._update_src = ""        # 已下载好的更新包目录
         self.pool = QThreadPool()
         self.signals = Signals()
         self.signals.synced.connect(self._on_synced)
+        self.signals.updateReady.connect(self._on_update_ready)
 
         self.ball = FloatingButton()
         self.ball.clicked.connect(self._on_ball_clicked)
@@ -131,6 +162,7 @@ class App(QObject):
             self.ball.move_to_bottom_right()
 
         self.tray = TrayIcon()
+        self.tray.updateRequested.connect(self._on_update)
         self.tray.toggleRequested.connect(self._toggle_ball)
         self.tray.quitRequested.connect(self.quit)
         self.tray.show()
@@ -141,9 +173,10 @@ class App(QObject):
             print(f"[ClassBoard] 就绪（{len(self.students)} 人）")
 
     # ------------------------------------------------------------------
-    def _on_synced(self, students, source):
+    def _on_synced(self, students, source, cloud_draw=False):
         self.students = students
         self.source = source
+        self.cloud_draw = bool(cloud_draw)
         print(f"[ClassBoard] 名单已载入（{len(students)} 人）")
 
     def _save_ball_position(self, x, y):
@@ -258,7 +291,18 @@ class App(QObject):
             self.session.set_duration(per)
             self.draw_window.set_info(self.session.mode, per)
         # 点击瞬间结果已定；上一轮高亮的人此时才从名单里消失
-        winner = self.session.draw()
+        winner = None
+        if self.cloud_draw and self.cloud_on and self.cfg is not None:
+            # 云端代抽：服务端返回谁就抽谁，失败自动回退本地
+            winner = net.cloud_draw(
+                self.cfg, self.class_name, self.session.mode,
+                self.session.remaining,
+                [s.student_no for s in self.session.drawn],
+            )
+            if winner is not None:
+                self.session.accept(winner)
+        if winner is None:
+            winner = self.session.draw()
         if winner is None:
             self._end_batch()
             return
@@ -302,6 +346,33 @@ class App(QObject):
         if self.draw_window is not None:
             self.draw_window.hide()
         self.ball.set_text("继续点名")
+
+    # ------------------------------------------------------------------ 更新
+    def _on_update(self):
+        if self._update_src:
+            # 已经下好了，这次点的是"重启完成更新"
+            if update.apply_and_restart(self._update_src, update.workdir()):
+                self.quit()
+            else:
+                self.tray.set_update_state("重启完成更新", True)
+                self.tray.notify("更新未完成", "无法替换程序文件，请手动解压覆盖。")
+            return
+
+        if not (self.cloud_on and self.cfg is not None):
+            self.tray.notify("无法检查更新", "当前未连接更新服务。")
+            return
+
+        self.tray.set_update_state("检查中…", False)
+        self.pool.start(UpdateTask(self.cfg, self.signals))
+
+    def _on_update_ready(self, src, version):
+        if not src:
+            self.tray.set_update_state("已是最新", False)
+            QTimer.singleShot(2500, lambda: self.tray.set_update_state("检查更新", True))
+            return
+        self._update_src = src
+        self.tray.set_update_state("重启完成更新", True)
+        self.tray.notify("更新已就绪", f"新版本 {version}，右键托盘选择「重启完成更新」。")
 
     def _toggle_ball(self):
         """托盘菜单 / 单击托盘图标：显示或隐藏悬浮窗。"""
