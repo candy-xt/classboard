@@ -20,7 +20,8 @@ elif sys.platform.startswith("linux") and not os.environ.get("QT_QPA_PLATFORM"):
         os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
-from PySide6.QtWidgets import QApplication
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from core import cloud, net, update
 from core.config import (
@@ -156,6 +157,8 @@ class App(QObject):
         self.ball.moved.connect(self._save_ball_position)
         self.ball.show()
         self.ball.move_to_bottom_right()
+        if _INSTANCE_SERVER is not None:
+            _INSTANCE_SERVER.newConnection.connect(self._on_second_instance)
         # 恢复上次拖到的位置
         saved = load_window_position("ball")
         if saved and not self.ball.restore_position(*saved):
@@ -374,6 +377,16 @@ class App(QObject):
         self.tray.set_update_state("重启完成更新", True)
         self.tray.notify("更新已就绪", f"新版本 {version}，右键托盘选择「重启完成更新」。")
 
+    def _on_second_instance(self):
+        """又有人双击了 exe：把悬浮球显示出来，别让人以为没反应。"""
+        conn = _INSTANCE_SERVER.nextPendingConnection() if _INSTANCE_SERVER else None
+        if conn is not None:
+            conn.disconnectFromServer()
+            conn.deleteLater()
+        self.ball.show()
+        self.ball.raise_()
+        self.tray.set_ball_visible(True)
+
     def _toggle_ball(self):
         """托盘菜单 / 单击托盘图标：显示或隐藏悬浮窗。"""
         if self.ball.isVisible():
@@ -390,7 +403,37 @@ class App(QObject):
         self.qapp.quit()
 
 
+_INSTANCE_KEY = "ClassBoard-SingleInstance"
+_INSTANCE_SERVER = None
+
+
+def acquire_single_instance() -> bool:
+    """保证只有一个实例。
+
+    已有实例在跑时，通知它把悬浮球显示出来，本进程返回 False。
+    """
+    global _INSTANCE_SERVER
+    probe = QLocalSocket()
+    probe.connectToServer(_INSTANCE_KEY)
+    if probe.waitForConnected(300):
+        probe.write(b"show")
+        probe.waitForBytesWritten(300)
+        probe.disconnectFromServer()
+        return False
+
+    QLocalServer.removeServer(_INSTANCE_KEY)   # 上次异常退出可能留下名字
+    _INSTANCE_SERVER = QLocalServer()
+    _INSTANCE_SERVER.listen(_INSTANCE_KEY)
+    return True
+
+
 def main():
+    qapp = QApplication.instance() or QApplication(sys.argv)
+    if not acquire_single_instance():
+        QMessageBox.information(
+            None, "ClassBoard",
+            "ClassBoard 已经在运行了。\n\n右下角托盘里可以找到它。")
+        return
     app = App()
     sys.exit(app.qapp.exec())
 

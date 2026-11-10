@@ -283,3 +283,18 @@ class TestUiSmoke(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestSingleInstance(unittest.TestCase):
+    """同一时间只允许开一个 ClassBoard。"""
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_second_instance_is_rejected(self):
+        import main as app_main
+
+        self.assertTrue(app_main.acquire_single_instance())      # 第一个占位
+        self.assertFalse(app_main.acquire_single_instance())     # 第二个被拒
