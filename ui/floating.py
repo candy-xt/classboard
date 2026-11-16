@@ -1,7 +1,7 @@
 """右下角悬浮球：图标 + "随机点名"，会话进行中变为"继续点名"。"""
 from PySide6.QtCore import QEvent, QTimer, Qt, Signal
 from PySide6.QtGui import QColor, QGuiApplication, QPainter, QPainterPath
-from PySide6.QtWidgets import QApplication, QHBoxLayout, QMenu, QWidget
+from PySide6.QtWidgets import QApplication, QMenu, QVBoxLayout, QWidget
 
 from qfluentwidgets import BodyLabel, FluentIcon, IconWidget
 
@@ -25,7 +25,7 @@ class FloatingButton(QWidget):
             Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedHeight(42)
+        self.setFixedSize(65, 42)
         self._hover = False
         self._pressed = False
         self._drag_offset = None
@@ -34,18 +34,21 @@ class FloatingButton(QWidget):
         self._system_moving = False
         self._user_moved = False
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 0, 18, 0)
-        layout.setSpacing(8)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 5, 4, 5)
+        layout.setSpacing(2)
+        layout.setAlignment(Qt.AlignCenter)
         self.icon = IconWidget()
         self.icon.setIcon(FluentIcon.PEOPLE)
-        self.icon.setFixedSize(18, 18)
+        self.icon.setFixedSize(16, 16)
         self.label = BodyLabel("随机点名")
+        self.label.setStyleSheet("font-size: 10px;")
+        self.label.setAlignment(Qt.AlignCenter)
         # 图标和文字不接收鼠标事件，事件直接落到外层，才能拖动和点击
         self.icon.setAttribute(Qt.WA_TransparentForMouseEvents)
         self.label.setAttribute(Qt.WA_TransparentForMouseEvents)
-        layout.addWidget(self.icon)
-        layout.addWidget(self.label)
+        layout.addWidget(self.icon, 0, Qt.AlignHCenter)
+        layout.addWidget(self.label, 0, Qt.AlignHCenter)
 
         # 拖动逻辑装在自己身上：按下/移动/释放都能收到
         self.setMouseTracking(True)
@@ -117,7 +120,7 @@ class FloatingButton(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         path = QPainterPath()
-        path.addRoundedRect(self.rect(), 21, 21)
+        path.addRoundedRect(self.rect(), 10, 10)
         fill = QColor(255, 255, 255, 245 if not self._hover else 255)
         painter.fillPath(path, fill)
         painter.setPen(QColor(0, 0, 0, 30))
