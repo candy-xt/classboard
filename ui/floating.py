@@ -25,7 +25,7 @@ class FloatingButton(QWidget):
             Qt.FramelessWindowHint | Qt.Tool | Qt.WindowStaysOnTopHint
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(65, 42)
+        self.setFixedSize(57, 46)
         self._hover = False
         self._pressed = False
         self._drag_offset = None
@@ -35,12 +35,12 @@ class FloatingButton(QWidget):
         self._user_moved = False
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 5, 4, 5)
+        layout.setContentsMargins(4, 7, 4, 7)
         layout.setSpacing(2)
         layout.setAlignment(Qt.AlignCenter)
         self.icon = IconWidget()
         self.icon.setIcon(FluentIcon.PEOPLE)
-        self.icon.setFixedSize(16, 16)
+        self.icon.setFixedSize(14, 14)
         self.label = BodyLabel("随机点名")
         self.label.setStyleSheet("font-size: 10px;")
         self.label.setAlignment(Qt.AlignCenter)
